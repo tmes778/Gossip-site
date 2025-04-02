@@ -1,0 +1,355 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>نظام أخبار البوكتوك</title>
+    <style>
+        :root {
+            --admin: #3f51b5;
+            --primary: #e91e63;
+            --success: #4caf50;
+            --danger: #f44336;
+            --warning: #ff9800;
+        }
+        body {
+            font-family: 'Tajawal', Arial, sans-serif;
+            margin: 0;
+            padding: 0;
+            background-color: #f5f7fa;
+        }
+        
+        /* أنماط تسجيل الدخول */
+        .login-container {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+        }
+        .auth-box {
+            background: white;
+            width: 100%;
+            max-width: 400px;
+            padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.1);
+            text-align: center;
+        }
+        
+        /* أنماط لوحة التحكم */
+        .admin-dashboard, .user-dashboard {
+            display: none;
+            padding: 20px;
+        }
+        .news-item {
+            background: white;
+            padding: 15px;
+            margin: 10px 0;
+            border-radius: 8px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+        }
+        .news-actions {
+            display: flex;
+            gap: 10px;
+            margin-top: 10px;
+        }
+        .btn {
+            padding: 8px 15px;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+        }
+        
+        /* أنماط مشتركة */
+        input, textarea {
+            width: 100%;
+            padding: 10px;
+            margin: 10px 0;
+            border: 2px solid #ddd;
+            border-radius: 8px;
+            font-family: inherit;
+        }
+        button {
+            background: var(--primary);
+            color: white;
+            border: none;
+            padding: 12px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 16px;
+        }
+        .hidden {
+            display: none;
+        }
+    </style>
+</head>
+<body>
+    <!-- شاشة تسجيل الدخول -->
+    <div id="loginScreen" class="login-container">
+        <div class="auth-box">
+            <h1>تسجيل الدخول</h1>
+            <input type="text" id="username" placeholder="اسم المستخدم">
+            <input type="password" id="password" placeholder="كلمة المرور">
+            <button onclick="login()">دخول</button>
+            <p>ليس لديك حساب؟ <a href="#" onclick="showRegister()">تسجيل جديد</a></p>
+            
+            <div id="registerForm" class="hidden">
+                <h2>تسجيل جديد</h2>
+                <input type="text" id="newUsername" placeholder="اسم المستخدم الجديد">
+                <input type="password" id="newPassword" placeholder="كلمة المرور الجديدة">
+                <button onclick="register()">تسجيل</button>
+                <p>لديك حساب؟ <a href="#" onclick="showLogin()">تسجيل دخول</a></p>
+            </div>
+        </div>
+    </div>
+    
+    <!-- لوحة تحكم المدير -->
+    <div id="adminDashboard" class="admin-dashboard">
+        <h1>لوحة تحكم المدير</h1>
+        <button onclick="logout()" style="background: var(--danger)">تسجيل خروج</button>
+        
+        <div class="stats">
+            <h3>الأخبار المعلقة: <span id="pendingCount">0</span></h3>
+            <h3>الأخبار المنشورة: <span id="publishedCount">0</span></h3>
+        </div>
+        
+        <div>
+            <h2>الأخبار المعلقة</h2>
+            <div id="pendingNews"></div>
+            
+            <h2>الأخبار المنشورة</h2>
+            <div id="publishedNews"></div>
+        </div>
+        
+        <div>
+            <h2>إضافة خبر جديد</h2>
+            <textarea id="adminNewsInput"></textarea>
+            <button onclick="addNewsAsAdmin()" style="background: var(--admin)">نشر الخبر</button>
+        </div>
+    </div>
+    
+    <!-- لوحة المستخدم العادي -->
+    <div id="userDashboard" class="user-dashboard">
+        <h1>مرحباً بك!</h1>
+        <button onclick="logout()" style="background: var(--danger)">تسجيل خروج</button>
+        
+        <div id="userNews"></div>
+        
+        <div>
+            <h2>إضافة خبر جديد</h2>
+            <textarea id="userNewsInput"></textarea>
+            <button onclick="submitUserNews()">إرسال للتدقيق</button>
+        </div>
+    </div>
+
+    <script>
+        // بيانات النظام
+        const app = {
+            currentUser: null,
+            news: JSON.parse(localStorage.getItem('news')) || {
+                published: [],
+                pending: []
+            },
+            users: JSON.parse(localStorage.getItem('users')) || {
+                "حسين_الناصر": {
+                    password: "ZZ123456",
+                    isAdmin: true
+                }
+            },
+            
+            init() {
+                // تحقق من تسجيل الدخول المسبق
+                const savedUser = localStorage.getItem('currentUser');
+                if (savedUser) {
+                    this.currentUser = JSON.parse(savedUser);
+                    this.showDashboard();
+                }
+            },
+            
+            login(username, password) {
+                if (this.users[username] && this.users[username].password === password) {
+                    this.currentUser = {
+                        username: username,
+                        isAdmin: this.users[username].isAdmin || false
+                    };
+                    localStorage.setItem('currentUser', JSON.stringify(this.currentUser));
+                    this.showDashboard();
+                    return true;
+                }
+                return false;
+            },
+            
+            register(username, password) {
+                if (this.users[username]) {
+                    return false;
+                }
+                
+                this.users[username] = {
+                    password: password,
+                    isAdmin: false
+                };
+                localStorage.setItem('users', JSON.stringify(this.users));
+                return true;
+            },
+            
+            showDashboard() {
+                document.getElementById('loginScreen').style.display = 'none';
+                
+                if (this.currentUser.isAdmin) {
+                    document.getElementById('adminDashboard').style.display = 'block';
+                    this.loadAdminDashboard();
+                } else {
+                    document.getElementById('userDashboard').style.display = 'block';
+                    this.loadUserDashboard();
+                }
+            },
+            
+            loadAdminDashboard() {
+                // عرض الأخبار المعلقة
+                document.getElementById('pendingNews').innerHTML = 
+                    this.news.pending.map(item => `
+                        <div class="news-item">
+                            <p>${item.content}</p>
+                            <small>مقدم من: ${item.author}</small>
+                            <div class="news-actions">
+                                <button class="btn" style="background: var(--success)" 
+                                    onclick="app.approveNews(${item.id})">موافقة</button>
+                                <button class="btn" style="background: var(--danger)" 
+                                    onclick="app.rejectNews(${item.id})">رفض</button>
+                            </div>
+                        </div>
+                    `).join('');
+                
+                // عرض الأخبار المنشورة
+                document.getElementById('publishedNews').innerHTML = 
+                    this.news.published.map(item => `
+                        <div class="news-item">
+                            <p>${item.content}</p>
+                            <small>نشر بواسطة: ${item.author}</small>
+                        </div>
+                    `).join('');
+                
+                // تحديث الإحصائيات
+                document.getElementById('pendingCount').textContent = this.news.pending.length;
+                document.getElementById('publishedCount').textContent = this.news.published.length;
+            },
+            
+            loadUserDashboard() {
+                document.getElementById('userNews').innerHTML = 
+                    this.news.published.map(item => `
+                        <div class="news-item">
+                            <p>${item.content}</p>
+                            <small>${item.author}</small>
+                        </div>
+                    `).join('');
+            },
+            
+            approveNews(id) {
+                const index = this.news.pending.findIndex(item => item.id === id);
+                if (index !== -1) {
+                    const item = this.news.pending[index];
+                    item.status = 'published';
+                    this.news.published.unshift(item);
+                    this.news.pending.splice(index, 1);
+                    this.saveNews();
+                    this.loadAdminDashboard();
+                }
+            },
+            
+            rejectNews(id) {
+                this.news.pending = this.news.pending.filter(item => item.id !== id);
+                this.saveNews();
+                this.loadAdminDashboard();
+            },
+            
+            addNewsAsAdmin() {
+                const content = document.getElementById('adminNewsInput').value.trim();
+                if (!content) return;
+                
+                this.news.published.unshift({
+                    id: Date.now(),
+                    content: content,
+                    author: this.currentUser.username,
+                    date: new Date().toLocaleString()
+                });
+                
+                this.saveNews();
+                document.getElementById('adminNewsInput').value = '';
+                this.loadAdminDashboard();
+            },
+            
+            submitUserNews() {
+                const content = document.getElementById('userNewsInput').value.trim();
+                if (!content) return;
+                
+                this.news.pending.unshift({
+                    id: Date.now(),
+                    content: content,
+                    author: this.currentUser.username,
+                    date: new Date().toLocaleString()
+                });
+                
+                this.saveNews();
+                document.getElementById('userNewsInput').value = '';
+                alert('تم إرسال الخبر للمراجعة!');
+            },
+            
+            saveNews() {
+                localStorage.setItem('news', JSON.stringify(this.news));
+            },
+            
+            logout() {
+                localStorage.removeItem('currentUser');
+                location.reload();
+            }
+        };
+
+        // وظائف واجهة المستخدم
+        function showRegister() {
+            document.getElementById('registerForm').classList.remove('hidden');
+        }
+        
+        function showLogin() {
+            document.getElementById('registerForm').classList.add('hidden');
+        }
+        
+        function login() {
+            const username = document.getElementById('username').value;
+            const password = document.getElementById('password').value;
+            
+            if (app.login(username, password)) {
+                // سيتم توجيهه تلقائياً عبر الدالة showDashboard()
+            } else {
+                alert('بيانات الدخول غير صحيحة!');
+            }
+        }
+        
+        function register() {
+            const username = document.getElementById('newUsername').value;
+            const password = document.getElementById('newPassword').value;
+            
+            if (app.register(username, password)) {
+                alert('تم التسجيل بنجاح! يمكنك الآن تسجيل الدخول');
+                showLogin();
+            } else {
+                alert('اسم المستخدم موجود مسبقاً!');
+            }
+        }
+        
+        function logout() {
+            app.logout();
+        }
+        
+        function addNewsAsAdmin() {
+            app.addNewsAsAdmin();
+        }
+        
+        function submitUserNews() {
+            app.submitUserNews();
+        }
+
+        // بدء التطبيق
+        app.init();
+    </script>
+</body>
+</html>
